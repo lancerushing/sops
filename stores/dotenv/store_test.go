@@ -80,3 +80,44 @@ func TestEmitEncryptedFileStability(t *testing.T) {
 		previous = bytes
 	}
 }
+
+// MACOnlyEncrypted metadata wants a bool
+// But dotenv wants all strings
+func TestCastForBoolMetaData(t *testing.T) {
+	store := &Store{}
+	bytes, err := store.EmitEncryptedFile(sops.Tree{
+		Branches: []sops.TreeBranch{{}},
+		Metadata: sops.Metadata{MACOnlyEncrypted: true},
+	})
+	assert.Nil(t, err)
+	assert.NotEmpty(t, bytes)
+
+	_, err2 := store.LoadEncryptedFile(bytes)
+	// "No keys found in file" err will occur after the mac-only-encrypted was loaded correctly
+	assert.ErrorContains(t, err2, "No keys found in file")
+
+}
+
+func TestMapToMetadata(t *testing.T) {
+	m1 := map[string]interface{}{
+		"mac_only_encrypted": "false",
+	}
+	m2 := map[string]interface{}{
+		"mac_only_encrypted": "true",
+	}
+	m3 := map[string]interface{}{
+		"mac_only_encrypted": "bad-value",
+	}
+
+	metaData1, err1 := mapToMetadata(m1)
+	assert.Nil(t, err1)
+	assert.False(t, metaData1.MACOnlyEncrypted)
+
+	metaData2, err2 := mapToMetadata(m2)
+	assert.Nil(t, err2)
+	assert.True(t, metaData2.MACOnlyEncrypted)
+
+	_, err3 := mapToMetadata(m3)
+	assert.ErrorContains(t, err3, "unrecognized value 'bad-value'")
+
+}

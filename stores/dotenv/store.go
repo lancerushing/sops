@@ -127,7 +127,19 @@ func (store *Store) EmitPlainFile(in sops.TreeBranches) ([]byte, error) {
 		if comment, ok := item.Key.(sops.Comment); ok {
 			line = fmt.Sprintf("#%s\n", comment.Value)
 		} else {
-			value := strings.Replace(item.Value.(string), "\n", "\\n", -1)
+			var value string
+			if v, ok := item.Value.(string); ok {
+				value = v
+			} else if v, ok := item.Value.(bool); ok {
+				value = "false"
+				if v {
+					value = "true"
+				}
+			} else {
+				return nil, fmt.Errorf("cannot cast value type %T to string", item.Value)
+			}
+
+			value = strings.Replace(value, "\n", "\\n", -1)
 			line = fmt.Sprintf("%s=%s\n", item.Key, value)
 		}
 		buffer.WriteString(line)
@@ -172,13 +184,26 @@ func metadataToMap(md stores.Metadata) (map[string]interface{}, error) {
 }
 
 func mapToMetadata(m map[string]interface{}) (stores.Metadata, error) {
+	var md stores.Metadata
+
+	if v, ok := m["mac_only_encrypted"]; ok {
+		switch v {
+		case "true":
+			m["mac_only_encrypted"] = true
+		case "false":
+			m["mac_only_encrypted"] = false
+		default:
+			return md, fmt.Errorf("key 'mac_only_encrypted' has unrecognized value '%s'", v)
+		}
+	}
+
 	for k, v := range m {
 		if s, ok := v.(string); ok {
 			m[k] = strings.Replace(s, "\\n", "\n", -1)
 		}
 	}
 	m = stores.Unflatten(m)
-	var md stores.Metadata
+
 	inrec, err := json.Marshal(m)
 	if err != nil {
 		return md, err
